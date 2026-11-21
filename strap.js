@@ -1,13 +1,21 @@
 // Connessione Web Bluetooth a un WHOOP 5.0 / MG e comandi della sveglia.
-import * as W from './whoop5.js';
+import * as W from './whoop5.js?v=8';
 
 const REQUEST_TIMEOUT_MS = 6000;
 const CLOCK_TOLERANCE_S = 2;
-const RECONNECT_TIMEOUT_MS = 5000;
 const KNOWN_DEVICE_KEY = 'sveglia-whoop-device';
 
 const hex = (u8) => Array.from(u8, (b) => b.toString(16).padStart(2, '0')).join('');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const withTimeout = (promise, ms) =>
+  Promise.race([promise, sleep(ms).then(() => { throw new Error(`nessuna risposta in ${ms / 1000}s`); })]);
+
+// Alcuni browser rifiutano con valori che non sono Error, o con Error senza messaggio.
+export function describe(e) {
+  if (e instanceof Error) return [e.name !== 'Error' && e.name, e.message].filter(Boolean).join(': ') || 'errore senza descrizione';
+  if (e === undefined || e === null) return 'errore senza descrizione';
+  return typeof e === 'string' ? e : JSON.stringify(e);
+}
 
 export class Strap {
   constructor(log) {
@@ -64,7 +72,7 @@ export class Strap {
         await ch.startNotifications();
         subscribed++;
       } catch (e) {
-        this.log(`  notify ${uuid.slice(4, 8)} non disponibile: ${e.message}`);
+        this.log(`  notify ${uuid.slice(4, 8)} non disponibile: ${describe(e)}`);
       }
     }
     if (!subscribed) throw new Error('Nessun canale di risposta disponibile sul braccialetto');
@@ -82,6 +90,7 @@ export class Strap {
   }
 
   // Riapre il Whoop già scelto in passato senza mostrare l'elenco, dove il browser lo consente.
+  // Ogni passaggio ha un nome, così se fallisce il log dice dove anche quando l'errore è muto.
   async #reconnectKnown() {
     if (!navigator.bluetooth.getDevices) {
       this.reconnect = 'non supportata da questo browser';
@@ -90,8 +99,9 @@ export class Strap {
     }
     let knownId = null;
     try { knownId = localStorage.getItem(KNOWN_DEVICE_KEY); } catch {}
+    let stage = 'elenco dei dispositivi autorizzati';
     try {
-      const devices = await navigator.bluetooth.getDevices();
+      const devices = await withTimeout(navigator.bluetooth.getDevices(), 2000);
       const device = devices.find((d) => d.id === knownId) ?? (devices.length === 1 ? devices[0] : null);
       if (!device) {
         this.reconnect = `supportata, ma nessun Whoop memorizzato (${devices.length} dispositivi)`;
@@ -99,15 +109,27 @@ export class Strap {
         return null;
       }
       this.log(`Riconnessione diretta a ${device.name || 'WHOOP'}…`);
-      const gatt = await Promise.race([
-        device.gatt.connect(),
-        sleep(RECONNECT_TIMEOUT_MS).then(() => { throw new Error('timeout'); }),
-      ]);
+      let gatt;
+      try {
+        stage = 'collegamento';
+        gatt = await withTimeout(device.gatt.connect(), 2500);
+      } catch (first) {
+        // Chrome vuole prima un segnale dal braccialetto per i dispositivi presi da getDevices.
+        if (!device.watchAdvertisements) throw first;
+        this.log(`  collegamento: ${describe(first)}, attendo un segnale dal braccialetto…`);
+        stage = 'attesa del segnale';
+        await withTimeout(new Promise((resolve, reject) => {
+          device.addEventListener('advertisementreceived', resolve, { once: true });
+          device.watchAdvertisements().catch(reject);
+        }), 2500);
+        stage = 'collegamento dopo il segnale';
+        gatt = await withTimeout(device.gatt.connect(), 2500);
+      }
       this.#adopt(device);
       this.reconnect = 'funziona';
       return gatt;
     } catch (e) {
-      this.reconnect = `supportata, ma il collegamento non è riuscito (${e.message})`;
+      this.reconnect = `supportata, ma si ferma a «${stage}» (${describe(e)})`;
       this.log(`Riconnessione diretta: ${this.reconnect}, apro l'elenco`);
       return null;
     }
@@ -142,7 +164,7 @@ export class Strap {
         return;
       } catch (e) {
         if (attempt >= 3) throw e;
-        this.log(`  scrittura rifiutata (${e.message}), riprovo…`);
+        this.log(`  scrittura rifiutata (${describe(e)}), riprovo…`);
         await sleep(1500);
       }
     }

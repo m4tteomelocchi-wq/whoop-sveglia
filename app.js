@@ -1,5 +1,5 @@
-import { Strap } from './strap.js';
-import { nextOccurrences, rearmDeadline, dateKey, SCHEDULE_SLOTS, TEST_SLOT } from './schedule.js';
+import { Strap, describe } from './strap.js?v=8';
+import { nextOccurrences, rearmDeadline, dateKey, SCHEDULE_SLOTS, TEST_SLOT } from './schedule.js?v=8';
 
 const $ = (id) => document.getElementById(id);
 const DAYS = [[1, 'Lunedì'], [2, 'Martedì'], [3, 'Mercoledì'], [4, 'Giovedì'], [5, 'Venerdì'], [6, 'Sabato'], [0, 'Domenica']];
@@ -219,10 +219,10 @@ async function run(msgEl, label, fn) {
     msgEl.className = 'msg ok';
     msgEl.textContent = text;
   } catch (e) {
-    log(`ERRORE: ${e.name}: ${e.message}`);
+    log(`ERRORE: ${describe(e)}`);
     msgEl.className = 'msg err';
     msgEl.textContent = humanError(e);
-    if (e.name === 'NotFoundError' || /non è un WHOOP/.test(e.message)) {
+    if (e?.name === 'NotFoundError' || /non è un WHOOP/.test(e?.message)) {
       $('notFound').hidden = false;
       $('notFound').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
@@ -235,12 +235,15 @@ async function run(msgEl, label, fn) {
 }
 
 function humanError(e) {
-  if (e.name === 'NotFoundError') return 'Braccialetto non trovato: segui i passi in alto.';
-  if (/non è un WHOOP/.test(e.message)) return 'Hai scelto un dispositivo che non è il Whoop: segui i passi in alto.';
-  if (e.name === 'NetworkError') return 'Connessione persa. Avvicina il telefono al braccialetto e riprova.';
-  if (/Bluefy|ancora armata/.test(e.message)) return e.message.charAt(0).toUpperCase() + e.message.slice(1) + '.';
-  if (/nessuna risposta/.test(e.message)) return 'Il braccialetto non risponde. Se usi l\'app Whoop, chiudila del tutto e riprova.';
-  return `Qualcosa non va: ${e.message}. Apri «Avanzate» e copia il log.`;
+  const m = e instanceof Error ? e.message : describe(e);
+  if (e?.name === 'NotFoundError') return 'Braccialetto non trovato: segui i passi in alto.';
+  if (/non è un WHOOP/.test(m)) return 'Hai scelto un dispositivo che non è il Whoop: segui i passi in alto.';
+  // Dopo un tentativo di riconnessione lungo, il browser può non considerare più il tocco «fresco».
+  if (e?.name === 'SecurityError') return 'Tocca di nuovo il pulsante per scegliere il Whoop.';
+  if (e?.name === 'NetworkError') return 'Connessione persa. Avvicina il telefono al braccialetto e riprova.';
+  if (/Bluefy|ancora armata/.test(m)) return m.charAt(0).toUpperCase() + m.slice(1) + '.';
+  if (/nessuna risposta/.test(m)) return 'Il braccialetto non risponde. Se usi l\'app Whoop, chiudila del tutto e riprova.';
+  return `Qualcosa non va: ${m}. Apri «Avanzate» e copia il log.`;
 }
 
 async function ensureConnected() {
@@ -373,4 +376,4 @@ renderWeek();
 changed();
 setInterval(render, 60_000);
 document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && render());
-log(`Pronta. Bluetooth web ${navigator.bluetooth ? 'disponibile' : 'NON disponibile'}.`);
+log(`Pronta (versione 8). Bluetooth web ${navigator.bluetooth ? 'disponibile' : 'NON disponibile'}.`);

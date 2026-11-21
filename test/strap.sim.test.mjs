@@ -175,7 +175,32 @@ await again.connect();
 await again.buzz();
 assert.ok(logs.some((l) => l.includes('Riconnessione diretta')));
 
-// Se la riconnessione diretta fallisce si torna all'elenco
+// Rifiuto «muto» come quello visto su Bluefy: il log deve dire dove si è fermato, non «undefined»
+logs.length = 0;
+navigator.bluetooth.getDevices = async () => [{ ...device, gatt: { connect: () => Promise.reject(undefined) } }];
+navigator.bluetooth.requestDevice = async () => device;
+const mute = new Strap((l) => logs.push(l));
+await mute.connect();
+assert.match(mute.reconnect, /«collegamento» \(errore senza descrizione\)/);
+assert.ok(!logs.join('\n').includes('undefined'));
+
+// Percorso Chrome: il primo collegamento fallisce, dopo un segnale dal braccialetto riesce
+let connects = 0;
+const watcher = {
+  ...device,
+  listeners: {},
+  addEventListener(type, fn) { this.listeners[type] = fn; },
+  async watchAdvertisements() { setTimeout(() => this.listeners.advertisementreceived?.(), 50); },
+  gatt: { ...device.gatt, connect() { return ++connects === 1 ? Promise.reject(new DOMException('fuori portata', 'NetworkError')) : device.gatt.connect(); } },
+};
+navigator.bluetooth.getDevices = async () => [watcher];
+navigator.bluetooth.requestDevice = async () => { throw new Error("l'elenco non doveva aprirsi"); };
+const viaAdv = new Strap((l) => logs.push(l));
+await viaAdv.connect();
+assert.equal(viaAdv.reconnect, 'funziona');
+assert.equal(connects, 2);
+
+// Se la riconnessione diretta non risponde si torna all'elenco
 let chooserOpened = false;
 navigator.bluetooth.getDevices = async () => [{ ...device, gatt: { connect: () => new Promise(() => {}) } }];
 navigator.bluetooth.requestDevice = async () => { chooserOpened = true; return device; };
