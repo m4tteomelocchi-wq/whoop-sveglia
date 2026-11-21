@@ -1,5 +1,5 @@
 // Promemoria nel Calendario per riarmare: un file .ics con un evento ricorrente.
-import { nextOccurrences, SCHEDULE_SLOTS } from './schedule.js?v=13';
+import { nextOccurrences, SCHEDULE_SLOTS } from './schedule.js?v=14';
 
 const DAY_CODES = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
 

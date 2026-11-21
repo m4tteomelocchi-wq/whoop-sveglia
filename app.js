@@ -1,6 +1,6 @@
-import { Strap, describe } from './strap.js?v=13';
-import { nextOccurrences, rearmDeadline, dateKey, SCHEDULE_SLOTS, TEST_SLOT } from './schedule.js?v=13';
-import { reminderPlan, suggestWeekday, reminderFileName, REMINDER_TIMES } from './reminder.js?v=13';
+import { Strap, describe } from './strap.js?v=14';
+import { nextOccurrences, rearmDeadline, dateKey, SCHEDULE_SLOTS, TEST_SLOT } from './schedule.js?v=14';
+import { reminderPlan, suggestWeekday, reminderFileName, REMINDER_TIMES } from './reminder.js?v=14';
 
 const $ = (id) => document.getElementById(id);
 const DAYS = [[1, 'Lunedì'], [2, 'Martedì'], [3, 'Mercoledì'], [4, 'Giovedì'], [5, 'Venerdì'], [6, 'Sabato'], [0, 'Domenica']];
@@ -113,15 +113,15 @@ const fmtDuration = (ms) => {
   return `${Math.floor(min / 60)} h ${min % 60} min`;
 };
 
-// Fino a quando le sveglie funzionano anche senza collegamento (calcolata da renderStatus).
-let coverageUntil = null;
+// Quali sveglie sono sul braccialetto: { count, from, to } (calcolata da renderStatus).
+let coverage = null;
 
 function renderConnection() {
   const card = $('conn');
   const on = strap.connected && connectedAt;
   card.className = `card conn ${on ? 'on' : connecting ? 'busy' : 'off'}`;
-  const until = coverageUntil
-    ? `Le sveglie suonano anche senza collegamento fino a <strong>${fmtDay.format(coverageUntil)}</strong>.`
+  const until = coverage
+    ? `Sul braccialetto ${coverage.count === 1 ? 'c\'è <strong>1 sveglia</strong>' : `ci sono <strong>${coverage.count} sveglie</strong>`}, ${coverage.count === 1 ? '' : `da <strong>${fmtShort.format(coverage.from)}</strong> a `}<strong>${fmtShort.format(coverage.to)}</strong>: suonano anche senza collegamento.`
     : 'Nessuna sveglia armata: collegalo e premi Arma.';
   if (on) {
     $('connTitle').textContent = `Collegato a ${strap.device.name || 'WHOOP'}`;
@@ -225,7 +225,9 @@ function renderStatus() {
   const firstUnarmed = nextOccurrences(weekSpec(), new Date(), SCHEDULE_SLOTS.length + 1, skipSet())
     .find((d) => !armedEpochs.has(Math.floor(d / 1000)));
   const deadline = rearmDeadline(firstUnarmed);
-  coverageUntil = armedEpochs.size ? new Date(Math.max(...armedEpochs) * 1000) : null;
+  coverage = armedEpochs.size
+    ? { count: armedEpochs.size, from: new Date(Math.min(...armedEpochs) * 1000), to: new Date(Math.max(...armedEpochs) * 1000) }
+    : null;
 
   if (!state.armed.length && state.armedWeek === null) {
     setPill('idle', 'Non ancora armata');
@@ -533,7 +535,7 @@ if (!navigator.bluetooth) {
   $('pageUrl').textContent = location.href;
 }
 // Bluefy tiene in cache anche la pagina: se sul server c'è una versione più nuova, ricarica.
-const APP_VERSION = 13;
+const APP_VERSION = 14;
 async function checkForUpdate() {
   try {
     const res = await fetch(`version.json?t=${Date.now()}`, { cache: 'no-store' });
@@ -554,4 +556,4 @@ renderWeek();
 changed();
 setInterval(render, 30_000);
 document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && render());
-log(`Pronta (versione 13). Bluetooth web ${navigator.bluetooth ? 'disponibile' : 'NON disponibile'}.`);
+log(`Pronta (versione 14). Bluetooth web ${navigator.bluetooth ? 'disponibile' : 'NON disponibile'}.`);
