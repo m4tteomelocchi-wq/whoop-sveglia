@@ -229,6 +229,7 @@ async function run(msgEl, label, fn) {
   } finally {
     busy = false;
     actionButtons.forEach((b) => (b.disabled = false));
+    $('reconnectInfo').textContent = `Riconnessione senza elenco: ${strap.reconnect}.`;
     render();
   }
 }

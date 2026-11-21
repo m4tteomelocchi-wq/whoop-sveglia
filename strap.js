@@ -15,6 +15,7 @@ export class Strap {
     this.device = null;
     this.command = null;
     this.seq = 1;
+    this.reconnect = 'non ancora provata';
     this.pending = new Map();
     this.reassemblers = new Map();
     this.onDisconnect = () => {};
@@ -82,22 +83,32 @@ export class Strap {
 
   // Riapre il Whoop già scelto in passato senza mostrare l'elenco, dove il browser lo consente.
   async #reconnectKnown() {
-    if (!navigator.bluetooth.getDevices) return null;
+    if (!navigator.bluetooth.getDevices) {
+      this.reconnect = 'non supportata da questo browser';
+      this.log('Riconnessione diretta: non supportata, apro l\'elenco');
+      return null;
+    }
     let knownId = null;
     try { knownId = localStorage.getItem(KNOWN_DEVICE_KEY); } catch {}
     try {
       const devices = await navigator.bluetooth.getDevices();
       const device = devices.find((d) => d.id === knownId) ?? (devices.length === 1 ? devices[0] : null);
-      if (!device) return null;
+      if (!device) {
+        this.reconnect = `supportata, ma nessun Whoop memorizzato (${devices.length} dispositivi)`;
+        this.log(`Riconnessione diretta: ${this.reconnect}`);
+        return null;
+      }
       this.log(`Riconnessione diretta a ${device.name || 'WHOOP'}…`);
       const gatt = await Promise.race([
         device.gatt.connect(),
         sleep(RECONNECT_TIMEOUT_MS).then(() => { throw new Error('timeout'); }),
       ]);
       this.#adopt(device);
+      this.reconnect = 'funziona';
       return gatt;
     } catch (e) {
-      this.log(`  riconnessione diretta non riuscita (${e.message}): apro l'elenco`);
+      this.reconnect = `supportata, ma il collegamento non è riuscito (${e.message})`;
+      this.log(`Riconnessione diretta: ${this.reconnect}, apro l'elenco`);
       return null;
     }
   }
