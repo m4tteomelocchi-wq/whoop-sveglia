@@ -208,4 +208,22 @@ const third = new Strap((l) => logs.push(l));
 await third.connect();
 assert.ok(chooserOpened);
 
+// Dopo 2 fallimenti di fila la riconnessione diretta si disattiva e si va dritti all'elenco
+const mem = new Map();
+globalThis.localStorage = { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, String(v)) };
+let getDevicesCalls = 0;
+navigator.bluetooth.getDevices = async () => { getDevicesCalls++; return [{ ...device, gatt: { connect: () => Promise.reject(undefined) } }]; };
+navigator.bluetooth.requestDevice = async () => device;
+for (let i = 0; i < 3; i++) await new Strap(() => {}).connect();
+assert.equal(getDevicesCalls, 2, 'al terzo giro non deve più tentare');
+const skipped = new Strap(() => {});
+await skipped.connect();
+assert.match(skipped.reconnect, /disattivata dopo 2 tentativi/);
+// …e un successo azzera il contatore
+mem.set('sveglia-whoop-reconnect-fails', '1');
+navigator.bluetooth.getDevices = async () => [device];
+navigator.bluetooth.requestDevice = async () => { throw new Error("l'elenco non doveva aprirsi"); };
+await new Strap(() => {}).connect();
+assert.equal(mem.get('sveglia-whoop-reconnect-fails'), '0');
+
 console.log(`ok — ${sim.writes} comandi scambiati con il braccialetto simulato senza errori`);

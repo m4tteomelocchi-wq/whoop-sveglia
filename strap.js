@@ -1,9 +1,19 @@
 // Connessione Web Bluetooth a un WHOOP 5.0 / MG e comandi della sveglia.
-import * as W from './whoop5.js?v=9';
+import * as W from './whoop5.js?v=10';
 
 const REQUEST_TIMEOUT_MS = 6000;
 const CLOCK_TOLERANCE_S = 2;
 const KNOWN_DEVICE_KEY = 'sveglia-whoop-device';
+const RECONNECT_FAILS_KEY = 'sveglia-whoop-reconnect-fails';
+const MAX_RECONNECT_FAILS = 2;
+const ADVERTISEMENT_WAIT_MS = 10_000;
+
+function storedNumber(key) {
+  try { return Number(localStorage.getItem(key)) || 0; } catch { return 0; }
+}
+function storeNumber(key, n) {
+  try { localStorage.setItem(key, String(n)); } catch {}
+}
 
 const hex = (u8) => Array.from(u8, (b) => b.toString(16).padStart(2, '0')).join('');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -97,6 +107,13 @@ export class Strap {
       this.log('Riconnessione diretta: non supportata, apro l\'elenco');
       return null;
     }
+    // Se su questo browser non ha mai funzionato, inutile far aspettare: si va dritti all'elenco.
+    const fails = storedNumber(RECONNECT_FAILS_KEY);
+    if (fails >= MAX_RECONNECT_FAILS) {
+      this.reconnect = `disattivata dopo ${fails} tentativi falliti: si usa l'elenco`;
+      this.log(`Riconnessione diretta: ${this.reconnect}`);
+      return null;
+    }
     let knownId = null;
     try { knownId = localStorage.getItem(KNOWN_DEVICE_KEY); } catch {}
     let stage = 'elenco dei dispositivi autorizzati';
@@ -116,20 +133,24 @@ export class Strap {
       } catch (first) {
         // Chrome vuole prima un segnale dal braccialetto per i dispositivi presi da getDevices.
         if (!device.watchAdvertisements) throw first;
-        this.log(`  collegamento: ${describe(first)}, attendo un segnale dal braccialetto…`);
+        this.log(`  collegamento: ${describe(first)}, cerco il segnale del braccialetto (fino a ${ADVERTISEMENT_WAIT_MS / 1000}s)…`);
         stage = 'attesa del segnale';
-        await withTimeout(new Promise((resolve, reject) => {
+        const started = Date.now();
+        const adv = await withTimeout(new Promise((resolve, reject) => {
           device.addEventListener('advertisementreceived', resolve, { once: true });
           device.watchAdvertisements().catch(reject);
-        }), 2500);
+        }), ADVERTISEMENT_WAIT_MS);
+        this.log(`  segnale ricevuto dopo ${((Date.now() - started) / 1000).toFixed(1)}s${adv?.rssi ? `, RSSI ${adv.rssi}` : ''}`);
         stage = 'collegamento dopo il segnale';
         gatt = await withTimeout(device.gatt.connect(), 2500);
       }
       this.#adopt(device);
       this.reconnect = 'funziona';
+      storeNumber(RECONNECT_FAILS_KEY, 0);
       return gatt;
     } catch (e) {
-      this.reconnect = `supportata, ma si ferma a «${stage}» (${describe(e)})`;
+      storeNumber(RECONNECT_FAILS_KEY, fails + 1);
+      this.reconnect = `supportata, ma si ferma a «${stage}» (${describe(e)}) · tentativo ${fails + 1} di ${MAX_RECONNECT_FAILS}`;
       this.log(`Riconnessione diretta: ${this.reconnect}, apro l'elenco`);
       return null;
     }

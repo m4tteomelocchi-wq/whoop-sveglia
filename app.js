@@ -1,5 +1,5 @@
-import { Strap, describe } from './strap.js?v=9';
-import { nextOccurrences, rearmDeadline, dateKey, SCHEDULE_SLOTS, TEST_SLOT } from './schedule.js?v=9';
+import { Strap, describe } from './strap.js?v=10';
+import { nextOccurrences, rearmDeadline, dateKey, SCHEDULE_SLOTS, TEST_SLOT } from './schedule.js?v=10';
 
 const $ = (id) => document.getElementById(id);
 const DAYS = [[1, 'Lunedì'], [2, 'Martedì'], [3, 'Mercoledì'], [4, 'Giovedì'], [5, 'Venerdì'], [6, 'Sabato'], [0, 'Domenica']];
@@ -204,10 +204,12 @@ let busy = false;
 const actionButtons = ['arm', 'buzz', 'testAlarm', 'readBack', 'disarm', 'verifyTest'].map($);
 
 let lastAction = null;
+let currentMsg = null;
 
 async function run(msgEl, label, fn) {
   if (busy) return;
   lastAction = () => run(msgEl, label, fn);
+  currentMsg = msgEl;
   busy = true;
   actionButtons.forEach((b) => (b.disabled = true));
   msgEl.className = 'msg';
@@ -247,7 +249,12 @@ function humanError(e) {
 }
 
 async function ensureConnected() {
-  if (!strap.connected) await strap.connect();
+  if (!strap.connected) {
+    const msg = currentMsg;
+    if (msg) msg.textContent = 'Cerco il Whoop…';
+    await strap.connect();
+    if (msg) msg.textContent = 'Collegato, un attimo…';
+  }
   if (!clockSynced) {
     await strap.syncClock();
     clockSynced = true;
@@ -373,7 +380,7 @@ if (!navigator.bluetooth) {
   $('pageUrl').textContent = location.href;
 }
 // Bluefy tiene in cache anche la pagina: se sul server c'è una versione più nuova, ricarica.
-const APP_VERSION = 9;
+const APP_VERSION = 10;
 async function checkForUpdate() {
   try {
     const res = await fetch(`version.json?t=${Date.now()}`, { cache: 'no-store' });
@@ -394,4 +401,4 @@ renderWeek();
 changed();
 setInterval(render, 60_000);
 document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && render());
-log(`Pronta (versione 9). Bluetooth web ${navigator.bluetooth ? 'disponibile' : 'NON disponibile'}.`);
+log(`Pronta (versione 10). Bluetooth web ${navigator.bluetooth ? 'disponibile' : 'NON disponibile'}.`);
