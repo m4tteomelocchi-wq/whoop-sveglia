@@ -173,7 +173,19 @@ function renderArmed() {
   }
 }
 
+function renderPendingTest() {
+  const test = pendingTest();
+  const card = $('pendingTest');
+  // Resta visibile dopo la verifica finché c'è un messaggio da leggere.
+  if (!test && !$('pendingMsg').textContent) { card.hidden = true; return; }
+  card.hidden = false;
+  if (test) $('pendingText').textContent =
+    `La sveglia di prova delle ${fmtTime.format(new Date(test.epoch * 1000))} doveva suonare mentre l'app era chiusa. Verifica che il braccialetto l'abbia eseguita: poi la settimana si ricompleta da sola.`;
+  $('verifyTest').hidden = !test;
+}
+
 function render() {
+  renderPendingTest();
   renderStatus();
   renderArmed();
 }
@@ -189,7 +201,7 @@ function changed() {
 // ── Azioni ──────────────────────────────────────────────────────────────────
 
 let busy = false;
-const actionButtons = ['arm', 'buzz', 'testAlarm', 'readBack', 'disarm'].map($);
+const actionButtons = ['arm', 'buzz', 'testAlarm', 'readBack', 'disarm', 'verifyTest'].map($);
 
 let lastAction = null;
 
@@ -225,7 +237,7 @@ function humanError(e) {
   if (e.name === 'NotFoundError') return 'Braccialetto non trovato: segui i passi in alto.';
   if (/non è un WHOOP/.test(e.message)) return 'Hai scelto un dispositivo che non è il Whoop: segui i passi in alto.';
   if (e.name === 'NetworkError') return 'Connessione persa. Avvicina il telefono al braccialetto e riprova.';
-  if (/Bluefy/.test(e.message)) return e.message;
+  if (/Bluefy|ancora armata/.test(e.message)) return e.message.charAt(0).toUpperCase() + e.message.slice(1) + '.';
   if (/nessuna risposta/.test(e.message)) return 'Il braccialetto non risponde. Se usi l\'app Whoop, chiudila del tutto e riprova.';
   return `Qualcosa non va: ${e.message}. Apri «Avanzate» e copia il log.`;
 }
@@ -269,58 +281,54 @@ async function testAlarm() {
   state.armed = [...state.armed.filter((a) => a.slot !== TEST_SLOT), { slot: TEST_SLOT, epoch: stored.epoch, test: true }];
   save();
   log(`Prova armata per le ${fmtClock.format(at)}`);
-  setTimeout(() => verifyTestFired(at), at - Date.now() + 15_000);
+  // Se la pagina resta aperta e collegata, la verifica parte da sola; altrimenti alla riapertura
+  // compare la scheda «Prova da verificare».
+  setTimeout(() => {
+    if (strap.connected && !busy) run($('testMsg'), 'Verifico la prova…', checkTest);
+  }, at - Date.now() + 15_000);
   return `Prova armata per le ${fmtClock.format(at)}. Puoi chiudere Bluefy e allontanarti: vibra lo stesso.`;
 }
 
+const pendingTest = () => state.armed.find((a) => a.test && a.epoch * 1000 < Date.now());
+
 // Quando una sveglia scatta, il firmware svuota lo slot: è la prova che l'ha eseguita.
-async function verifyTestFired(at) {
-  if (!strap.connected || busy) return; // app chiusa o occupata: lo verificherà «Rileggi» o il prossimo Arma
-  const msg = $('testMsg');
-  busy = true;
-  try {
-    const slot = await strap.readAlarm(TEST_SLOT);
-    const fired = !slot || slot.epoch === 0;
-    log(`Verifica prova: slot ${TEST_SLOT} ${fired ? 'svuotato → eseguita dal braccialetto' : `ancora armato (${slot.epoch})`}`);
-    msg.className = fired ? 'msg ok' : 'msg err';
-    msg.textContent = fired
-      ? `Il braccialetto ha eseguito la sveglia delle ${fmtClock.format(at)}. L'hai sentita vibrare?`
-      : 'Il braccialetto risulta ancora armato: la prova non è partita. Copia il log da «Avanzate».';
-    if (fired) {
-      state.armed = state.armed.filter((a) => !a.test);
-      // Restituisce lo slot preso in prestito alla settimana.
-      if (state.armedWeek !== null && !dirty()) {
-        await arm({ confirmBuzz: false });
-        msg.textContent += ' Settimana di nuovo completa.';
-      }
-    }
-    save();
-  } catch (e) {
-    log(`Verifica prova non riuscita: ${e.message}`);
-  } finally {
-    busy = false;
-    render();
+async function checkTest() {
+  const test = state.armed.find((a) => a.test);
+  if (!test) return 'Nessuna prova da verificare.';
+  const at = fmtTime.format(new Date(test.epoch * 1000));
+  const slot = await strap.readAlarm(test.slot);
+  if (slot && slot.epoch === test.epoch) {
+    log(`Verifica prova: slot ${test.slot} ancora armato (${slot.epoch})`);
+    throw new Error(`la prova delle ${at} risulta ancora armata: il braccialetto non l'ha eseguita`);
   }
+  log(`Verifica prova: slot ${test.slot} svuotato → eseguita dal braccialetto`);
+  state.armed = state.armed.filter((a) => !a.test);
+  save();
+  let text = `Confermato: il braccialetto ha eseguito da solo la prova delle ${at}.`;
+  // Restituisce lo slot preso in prestito alla settimana.
+  if (state.armedWeek !== null && !dirty()) {
+    await arm({ confirmBuzz: false });
+    text += ' Settimana di nuovo completa.';
+  }
+  return text;
 }
 
 async function readBack() {
-  const pendingTest = state.armed.find((a) => a.test);
+  if (pendingTest()) return checkTest();
+  const test = state.armed.find((a) => a.test);
   const records = await strap.readAllAlarms(SCHEDULE_SLOTS);
   const now = Date.now() / 1000;
   state.armed = records.filter((r) => r && r.epoch > now).map((r) => ({
-    slot: r.id, epoch: r.epoch, test: pendingTest?.slot === r.id && pendingTest.epoch === r.epoch,
+    slot: r.id, epoch: r.epoch, test: test?.slot === r.id && test.epoch === r.epoch,
   }));
   for (const r of records) if (r) log(`  slot ${r.id}: ${r.epoch ? new Date(r.epoch * 1000).toLocaleString('it-IT') : 'vuoto'}`);
   save();
-  const stillThere = records.some((r) => r && r.id === pendingTest?.slot && r.epoch === pendingTest.epoch);
-  if (pendingTest && pendingTest.epoch < now && !stillThere) {
-    return `La prova delle ${fmtClock.format(new Date(pendingTest.epoch * 1000))} è stata eseguita dal braccialetto, anche ad app chiusa. Premi «Arma» per ricompletare la settimana.`;
-  }
   return `Sul braccialetto ci sono ${state.armed.length} sveglie future.`;
 }
 
 async function disarm() {
   for (const slot of SCHEDULE_SLOTS) await strap.disableAlarm(slot);
+  state.armed = [];
   await readBack();
   state.armedWeek = null;
   state.armedSkip = null;
@@ -334,10 +342,11 @@ async function disarm() {
 $('arm').addEventListener('click', () => run($('armMsg'), 'Connessione al braccialetto…', arm));
 $('buzz').addEventListener('click', () => run($('testMsg'), 'Connessione…', async () => { await strap.buzz(); return 'Ha vibrato?'; }));
 $('testAlarm').addEventListener('click', () => run($('testMsg'), 'Connessione…', testAlarm));
-$('readBack').addEventListener('click', () => run($('armMsg'), 'Lettura…', readBack));
+$('readBack').addEventListener('click', () => run($('advMsg'), 'Lettura…', readBack));
 $('disarm').addEventListener('click', () => {
-  if (confirm('Disarmare tutte le sveglie sul braccialetto?')) run($('armMsg'), 'Disarmo…', disarm);
+  if (confirm('Disarmare tutte le sveglie sul braccialetto?')) run($('advMsg'), 'Disarmo…', disarm);
 });
+$('verifyTest').addEventListener('click', () => run($('pendingMsg'), 'Connessione al braccialetto…', checkTest));
 $('copyWeekdays').addEventListener('click', () => {
   const mon = state.week[1];
   for (const d of [2, 3, 4, 5]) state.week[d] = { ...mon };

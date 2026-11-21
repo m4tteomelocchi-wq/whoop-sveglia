@@ -3,6 +3,8 @@ import * as W from './whoop5.js';
 
 const REQUEST_TIMEOUT_MS = 6000;
 const CLOCK_TOLERANCE_S = 2;
+const RECONNECT_TIMEOUT_MS = 5000;
+const KNOWN_DEVICE_KEY = 'sveglia-whoop-device';
 
 const hex = (u8) => Array.from(u8, (b) => b.toString(16).padStart(2, '0')).join('');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -26,20 +28,21 @@ export class Strap {
     if (!navigator.bluetooth) {
       throw new Error('Questo browser non supporta il Bluetooth. Su iPhone apri la pagina in Bluefy.');
     }
+    let gatt = null;
     if (!this.device) {
-      // Anche per nome: alcuni firmware mettono l'UUID del servizio solo nella scan response.
-      this.device = await navigator.bluetooth.requestDevice({
-        filters: [{ services: [W.SERVICE] }, { namePrefix: 'WHOOP' }, { namePrefix: 'Whoop' }],
-        optionalServices: [W.SERVICE, 'battery_service'],
-      });
-      this.device.addEventListener('gattserverdisconnected', () => {
-        this.command = null;
-        this.log('Braccialetto disconnesso');
-        this.onDisconnect();
-      });
+      gatt = await this.#reconnectKnown();
+      if (!gatt) {
+        // Anche per nome: alcuni firmware mettono l'UUID del servizio solo nella scan response.
+        this.#adopt(await navigator.bluetooth.requestDevice({
+          filters: [{ services: [W.SERVICE] }, { namePrefix: 'WHOOP' }, { namePrefix: 'Whoop' }],
+          optionalServices: [W.SERVICE, 'battery_service'],
+        }));
+      }
     }
-    this.log(`Connessione a ${this.device.name || 'WHOOP'}…`);
-    const gatt = await this.device.gatt.connect();
+    if (!gatt) {
+      this.log(`Connessione a ${this.device.name || 'WHOOP'}…`);
+      gatt = await this.device.gatt.connect();
+    }
     let service;
     try {
       service = await gatt.getPrimaryService(W.SERVICE);
@@ -65,6 +68,38 @@ export class Strap {
     }
     if (!subscribed) throw new Error('Nessun canale di risposta disponibile sul braccialetto');
     this.log(`Connesso, ${subscribed} canali in ascolto`);
+  }
+
+  #adopt(device) {
+    this.device = device;
+    try { localStorage.setItem(KNOWN_DEVICE_KEY, device.id); } catch {}
+    device.addEventListener('gattserverdisconnected', () => {
+      this.command = null;
+      this.log('Braccialetto disconnesso');
+      this.onDisconnect();
+    });
+  }
+
+  // Riapre il Whoop già scelto in passato senza mostrare l'elenco, dove il browser lo consente.
+  async #reconnectKnown() {
+    if (!navigator.bluetooth.getDevices) return null;
+    let knownId = null;
+    try { knownId = localStorage.getItem(KNOWN_DEVICE_KEY); } catch {}
+    try {
+      const devices = await navigator.bluetooth.getDevices();
+      const device = devices.find((d) => d.id === knownId) ?? (devices.length === 1 ? devices[0] : null);
+      if (!device) return null;
+      this.log(`Riconnessione diretta a ${device.name || 'WHOOP'}…`);
+      const gatt = await Promise.race([
+        device.gatt.connect(),
+        sleep(RECONNECT_TIMEOUT_MS).then(() => { throw new Error('timeout'); }),
+      ]);
+      this.#adopt(device);
+      return gatt;
+    } catch (e) {
+      this.log(`  riconnessione diretta non riuscita (${e.message}): apro l'elenco`);
+      return null;
+    }
   }
 
   async disconnect() {

@@ -118,6 +118,13 @@
     <p class="note">Basta farlo la prima volta che armi la settimana. Quando l'abbonamento scade puoi disinstallare l'app Whoop, e il problema sparisce.</p>
   </section>
 
+  <section class="card" id="pendingTest" hidden>
+    <h2>Prova da verificare</h2>
+    <p style="margin:0" id="pendingText"></p>
+    <button class="primary" id="verifyTest" style="margin-top:12px">Verifica la prova</button>
+    <p class="msg" id="pendingMsg" aria-live="polite"></p>
+  </section>
+
   <section class="card hero" aria-live="polite">
     <div class="label" id="heroLabel">Prossima sveglia</div>
     <div class="time" id="heroTime">--:--</div>
@@ -135,7 +142,7 @@
 
   <section class="card">
     <button class="primary" id="arm">Arma sul braccialetto</button>
-    <p class="msg" id="armMsg"></p>
+    <p class="msg" id="armMsg" aria-live="polite"></p>
     <p class="note">Il braccialetto conserva fino a <strong>6 sveglie</strong> e le fa suonare da solo, con il suo orologio interno: il telefono può essere spento, lontano, con l'app chiusa. Le sveglie ripetute non esistono nel firmware, quindi l'app arma le prossime 6 e ti dice entro quando riaprirla.</p>
   </section>
 
@@ -151,7 +158,7 @@
       <button id="buzz">Vibra ora</button>
       <button id="testAlarm">Sveglia di prova tra 1 minuto</button>
     </div>
-    <p class="msg" id="testMsg"></p>
+    <p class="msg" id="testMsg" aria-live="polite"></p>
   </section>
 
   <section class="card">
@@ -177,6 +184,7 @@
         <button class="small danger" id="disarm">Disarma tutto</button>
         <button class="small" id="copyLog">Copia log</button>
       </div>
+      <p class="msg" id="advMsg" aria-live="polite"></p>
       <pre id="log"></pre>
     </details>
   </section>

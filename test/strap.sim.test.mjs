@@ -166,4 +166,21 @@ assert.equal(sim.slots.size, 0);
 // Molte richieste in sequenza: il numero di sequenza fa il giro senza confondere le risposte
 for (let i = 0; i < 300; i++) await strap.readAlarm(1 + (i % 6));
 
+// Riapertura: il Whoop già autorizzato si riprende con getDevices, senza mostrare l'elenco
+await strap.disconnect();
+navigator.bluetooth.getDevices = async () => [device];
+navigator.bluetooth.requestDevice = async () => { throw new Error("l'elenco non doveva aprirsi"); };
+const again = new Strap((l) => logs.push(l));
+await again.connect();
+await again.buzz();
+assert.ok(logs.some((l) => l.includes('Riconnessione diretta')));
+
+// Se la riconnessione diretta fallisce si torna all'elenco
+let chooserOpened = false;
+navigator.bluetooth.getDevices = async () => [{ ...device, gatt: { connect: () => new Promise(() => {}) } }];
+navigator.bluetooth.requestDevice = async () => { chooserOpened = true; return device; };
+const third = new Strap((l) => logs.push(l));
+await third.connect();
+assert.ok(chooserOpened);
+
 console.log(`ok — ${sim.writes} comandi scambiati con il braccialetto simulato senza errori`);
