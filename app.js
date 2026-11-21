@@ -1,5 +1,5 @@
-import { Strap, describe } from './strap.js?v=10';
-import { nextOccurrences, rearmDeadline, dateKey, SCHEDULE_SLOTS, TEST_SLOT } from './schedule.js?v=10';
+import { Strap, describe } from './strap.js?v=11';
+import { nextOccurrences, rearmDeadline, dateKey, SCHEDULE_SLOTS, TEST_SLOT } from './schedule.js?v=11';
 
 const $ = (id) => document.getElementById(id);
 const DAYS = [[1, 'Lunedì'], [2, 'Martedì'], [3, 'Mercoledì'], [4, 'Giovedì'], [5, 'Venerdì'], [6, 'Sabato'], [0, 'Domenica']];
@@ -18,6 +18,7 @@ const defaults = () => ({
   armed: [],      // [{ slot, epoch }] come riletto dal braccialetto
   armedWeek: null,
   armedSkip: null,
+  strap: null,    // { battery, firmware, skew, at } dall'ultima connessione
 });
 
 function load() {
@@ -86,7 +87,23 @@ function upcomingArmed() {
   return state.armed.filter((a) => a.epoch > now).sort((a, b) => a.epoch - b.epoch);
 }
 
+const LOW_BATTERY = 25;
+
+function renderStrapInfo() {
+  const el = $('strapInfo');
+  const s = state.strap;
+  if (!s) { el.textContent = ''; return; }
+  const ago = Math.round((Date.now() - s.at) / 86_400_000);
+  const when = ago === 0 ? 'oggi' : ago === 1 ? 'ieri' : `${ago} giorni fa`;
+  const low = s.battery < LOW_BATTERY;
+  el.className = 'strap-info' + (low ? ' low' : '');
+  el.textContent = low
+    ? `Batteria del Whoop al ${Math.round(s.battery)}% (${when}): ricaricalo, se si spegne le sveglie si possono perdere.`
+    : `Whoop: batteria ${Math.round(s.battery)}% · orologio allineato · ${when}`;
+}
+
 function renderStatus() {
+  renderStrapInfo();
   const up = upcomingArmed();
   const pill = $('statusPill');
   const next = up[0] && new Date(up[0].epoch * 1000);
@@ -256,7 +273,9 @@ async function ensureConnected() {
     if (msg) msg.textContent = 'Collegato, un attimo…';
   }
   if (!clockSynced) {
-    await strap.syncClock();
+    const info = await strap.syncClock();
+    state.strap = { battery: info.battery, firmware: info.firmware, skew: info.skew, at: Date.now() };
+    save();
     clockSynced = true;
   }
 }
@@ -380,7 +399,7 @@ if (!navigator.bluetooth) {
   $('pageUrl').textContent = location.href;
 }
 // Bluefy tiene in cache anche la pagina: se sul server c'è una versione più nuova, ricarica.
-const APP_VERSION = 10;
+const APP_VERSION = 11;
 async function checkForUpdate() {
   try {
     const res = await fetch(`version.json?t=${Date.now()}`, { cache: 'no-store' });
@@ -401,4 +420,4 @@ renderWeek();
 changed();
 setInterval(render, 60_000);
 document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && render());
-log(`Pronta (versione 10). Bluetooth web ${navigator.bluetooth ? 'disponibile' : 'NON disponibile'}.`);
+log(`Pronta (versione 11). Bluetooth web ${navigator.bluetooth ? 'disponibile' : 'NON disponibile'}.`);

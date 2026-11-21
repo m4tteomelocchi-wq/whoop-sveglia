@@ -78,6 +78,8 @@
   .armed .when b { font-variant-numeric: tabular-nums; }
   .armed .meta { font-size: 13px; color: var(--muted); }
   .armed .skipped .when { text-decoration: line-through; color: var(--muted); }
+  .strap-info { margin-top: 10px; font-size: 13px; color: var(--muted); }
+  .strap-info.low { color: var(--warn); font-weight: 600; }
   .empty { color: var(--muted); font-size: 14px; margin: 0; }
   .note { font-size: 14px; color: var(--muted); margin: 10px 0 0; }
   .note strong { color: var(--text); }
@@ -130,6 +132,7 @@
     <div class="time" id="heroTime">--:--</div>
     <div class="day" id="heroDay">Nessuna sveglia armata</div>
     <div class="pill idle" id="statusPill">Non ancora armata</div>
+    <div class="strap-info" id="strapInfo"></div>
   </section>
 
   <section class="card">
@@ -166,7 +169,7 @@
       <summary>Come funziona</summary>
       <ol>
         <li>Indossa il Whoop, con il Bluetooth dell'iPhone acceso.</li>
-        <li>Imposta gli orari e premi <strong>Arma</strong>. Al primo uso scegli il tuo Whoop nell'elenco. Se iOS chiede di abbinarlo, accetta.</li>
+        <li>Imposta gli orari e premi <strong>Arma</strong>. Bluefy ti chiede ogni volta di scegliere il Whoop nell'elenco: è normale, basta un tocco. La prima volta, se iOS chiede di abbinarlo, accetta.</li>
         <li>L'app rimette a posto l'orologio del braccialetto, scrive le sveglie e le rilegge una per una per controllarle.</li>
         <li>Al mattino vibra per circa 30 secondi. Per fermarlo, tocca due volte il braccialetto.</li>
         <li>Ora puoi chiudere Bluefy e lasciare il telefono dove vuoi: le sveglie sono dentro il braccialetto.</li>
@@ -184,7 +187,7 @@
         <button class="small danger" id="disarm">Disarma tutto</button>
         <button class="small" id="copyLog">Copia log</button>
       </div>
-      <p class="note">Versione 10</p>
+      <p class="note">Versione 11</p>
       <p class="note" id="reconnectInfo">Riconnessione senza elenco: non ancora provata.</p>
       <p class="msg" id="advMsg" aria-live="polite"></p>
       <pre id="log"></pre>
@@ -192,6 +195,6 @@
   </section>
 </main>
 
-<script type="module" src="app.js?v=10"></script>
+<script type="module" src="app.js?v=11"></script>
 </body>
 </html>

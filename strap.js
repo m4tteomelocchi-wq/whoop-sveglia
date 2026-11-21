@@ -1,5 +1,5 @@
 // Connessione Web Bluetooth a un WHOOP 5.0 / MG e comandi della sveglia.
-import * as W from './whoop5.js?v=10';
+import * as W from './whoop5.js?v=11';
 
 const REQUEST_TIMEOUT_MS = 6000;
 const CLOCK_TOLERANCE_S = 2;
