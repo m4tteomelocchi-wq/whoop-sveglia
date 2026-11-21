@@ -131,9 +131,9 @@ assert.ok(logs.some((l) => l.includes('scarto -40s')));
 
 // Settimana completa: 5 slot scritti e riletti
 const week = ['', '07:00', '07:00', '07:00', '07:00', '07:00', ''];
-const occ = nextOccurrences(week, new Date(), 5);
+const occ = nextOccurrences(week, new Date(), SCHEDULE_SLOTS.length);
 for (const [i, slot] of SCHEDULE_SLOTS.entries()) await strap.setAlarm(slot, occ[i]);
-assert.equal(sim.slots.size, 5);
+assert.equal(sim.slots.size, 6);
 for (const [i, slot] of SCHEDULE_SLOTS.entries()) {
   const r = await strap.readAlarm(slot);
   assert.equal(r.epoch, Math.floor(occ[i] / 1000));
@@ -144,14 +144,17 @@ for (const [i, slot] of SCHEDULE_SLOTS.entries()) {
 // Orario nel passato → errore leggibile, niente scritto
 await assert.rejects(strap.setAlarm(1, new Date(Date.now() - 5000)), /non nel futuro/);
 
-// Prova tra 2 s sullo slot dedicato: il firmware la esegue e svuota lo slot
+// Prova tra 2 s sullo slot preso in prestito: il firmware la esegue e svuota lo slot
 await strap.setAlarm(TEST_SLOT, new Date(Date.now() + 2000));
 const before = sim.buzzes;
 await new Promise((r) => setTimeout(r, 2200));
 sim.tick();
 assert.equal(sim.buzzes, before + 1);
 assert.equal((await strap.readAlarm(TEST_SLOT)).epoch, 0);
-assert.equal(sim.slots.size, 5, 'la prova non tocca la settimana');
+assert.equal(sim.slots.size, 5, 'la prova tocca solo lo slot in prestito');
+// …che si riarma con la sesta occorrenza
+await strap.setAlarm(TEST_SLOT, occ[5]);
+assert.equal(sim.slots.size, 6);
 
 // Vibrazione immediata con risposta PENDING → SUCCESS
 await strap.buzz();

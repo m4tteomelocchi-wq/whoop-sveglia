@@ -8,8 +8,10 @@ direttamente nel firmware, che poi vibra da solo anche col telefono spento.
 
 ## Come funziona
 
-- Il firmware ha 6 slot sveglia, ma ognuno suona una sola volta. L'app arma le prossime 5
-  occorrenze della settimana negli slot 1–5 e tiene il 6 per le prove.
+- Il firmware ha 6 slot sveglia, ma ognuno suona una sola volta. L'app arma le prossime 6
+  occorrenze della settimana; la sveglia di prova prende in prestito lo slot 6 e lo restituisce
+  appena ha suonato.
+- Le sveglie scattano dall'orologio interno del braccialetto: telefono e app non servono.
 - Ogni sveglia scritta viene riletta dal braccialetto, così si sa che è stata memorizzata davvero.
 - Senza l'app ufficiale nessuno risincronizza più l'orologio del braccialetto: lo fa questa
   app a ogni connessione.

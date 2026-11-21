@@ -102,18 +102,24 @@ function renderStatus() {
     $('heroDay').textContent = planned ? fmtDay.format(planned) : 'Nessuna sveglia attiva';
   }
 
-  const deadline = rearmDeadline(up.map((a) => new Date(a.epoch * 1000)));
+  // La prima sveglia in programma che il braccialetto non ha: è lei a fissare la scadenza.
+  const armedEpochs = new Set(up.filter((a) => !a.test).map((a) => a.epoch));
+  const firstUnarmed = nextOccurrences(weekSpec(), new Date(), SCHEDULE_SLOTS.length + 1, skipSet())
+    .find((d) => !armedEpochs.has(Math.floor(d / 1000)));
+  const deadline = rearmDeadline(firstUnarmed);
+
   if (!state.armed.length && state.armedWeek === null) {
     setPill('idle', 'Non ancora armata');
   } else if (dirty()) {
     setPill('warn', 'Modifiche da armare');
-  } else if (!up.length) {
-    setPill(nextOccurrences(weekSpec(), new Date(), 1, skipSet()).length ? 'err' : 'idle',
-      nextOccurrences(weekSpec(), new Date(), 1, skipSet()).length ? 'Scaduta: riarma' : 'Nessuna sveglia in settimana');
-  } else if (up.length < SCHEDULE_SLOTS.length && nextOccurrences(weekSpec(), new Date(), SCHEDULE_SLOTS.length, skipSet()).length > up.length) {
-    setPill('warn', `Ne restano ${up.length}: riarma quando puoi`);
+  } else if (!firstUnarmed) {
+    setPill(armedEpochs.size ? 'ok' : 'idle', armedEpochs.size ? 'Armata' : 'Nessuna sveglia in settimana');
+  } else if (!armedEpochs.size || firstUnarmed < new Date(Math.max(...armedEpochs) * 1000)) {
+    setPill('err', `Manca la sveglia di ${fmtShort.format(firstUnarmed)}: premi Arma`);
+  } else if (new Date() >= deadline) {
+    setPill('warn', `Riarma prima di ${fmtShort.format(firstUnarmed)}, ${fmtTime.format(firstUnarmed)}`);
   } else {
-    setPill('ok', `Armata · riapri entro ${fmtShort.format(deadline)}`);
+    setPill('ok', `Armata · riapri entro ${fmtShort.format(deadline)} sera`);
   }
 
   function setPill(kind, text) {
@@ -138,7 +144,7 @@ function renderArmed() {
     .filter((s) => s && s.date > new Date());
 
   const items = [
-    ...up.map((a) => ({ date: new Date(a.epoch * 1000), slot: a.slot })),
+    ...up.map((a) => ({ date: new Date(a.epoch * 1000), slot: a.slot, test: a.test })),
     ...skipped.map((s) => ({ date: s.date, skippedKey: s.key })),
   ].sort((a, b) => a.date - b.date);
 
@@ -150,9 +156,9 @@ function renderArmed() {
     li.innerHTML = `
       <div>
         <div class="when">${day.charAt(0).toUpperCase() + day.slice(1)} · <b>${fmtTime.format(it.date)}</b></div>
-        <div class="meta">${it.skippedKey ? 'Saltata: premi Arma per applicare' : it.slot === TEST_SLOT ? 'Prova' : `Slot ${it.slot} · verificata ✓`}</div>
+        <div class="meta">${it.skippedKey ? 'Saltata: premi Arma per applicare' : it.test ? `Prova · slot ${it.slot}` : `Slot ${it.slot} · verificata ✓`}</div>
       </div>`;
-    if (it.slot !== TEST_SLOT) {
+    if (!it.test) {
       const btn = document.createElement('button');
       btn.className = 'small';
       btn.textContent = it.skippedKey ? 'Ripristina' : 'Salta';
@@ -232,7 +238,7 @@ async function ensureConnected() {
   }
 }
 
-async function arm() {
+async function arm({ confirmBuzz = true } = {}) {
   const occ = nextOccurrences(weekSpec(), new Date(), SCHEDULE_SLOTS.length, skipSet());
   log(`Armo ${occ.length} sveglie: ${occ.map((d) => fmtShort.format(d) + ' ' + fmtTime.format(d)).join(', ') || 'nessuna'}`);
   const armed = [];
@@ -247,32 +253,32 @@ async function arm() {
       if (left && left.epoch > Date.now() / 1000) throw new Error(`slot ${slot} non si è svuotato`);
     }
   }
-  const test = state.armed.find((a) => a.slot === TEST_SLOT && a.epoch > Date.now() / 1000);
-  state.armed = test ? [...armed, test] : armed;
+  state.armed = armed;
   state.armedWeek = weekSpec();
   state.armedSkip = [...state.skip].sort();
   save();
-  await strap.buzz().catch(() => {});
+  if (confirmBuzz) await strap.buzz().catch(() => {});
   if (!occ.length) return 'Nessuna sveglia in settimana: braccialetto svuotato.';
   return `Fatto. ${occ.length} sveglie scritte e verificate sul braccialetto, che ha appena vibrato per confermare.`;
 }
 
 async function testAlarm() {
-  // Slot dedicato, così la prova non tocca la settimana armata.
+  // Prende in prestito l'ultimo slot: le prime sveglie della settimana restano intatte.
   const at = new Date(Math.ceil((Date.now() + 65_000) / 1000) * 1000);
   const stored = await strap.setAlarm(TEST_SLOT, at);
-  state.armed = [...state.armed.filter((a) => a.slot !== TEST_SLOT), { slot: TEST_SLOT, epoch: stored.epoch }];
+  state.armed = [...state.armed.filter((a) => a.slot !== TEST_SLOT), { slot: TEST_SLOT, epoch: stored.epoch, test: true }];
   save();
   log(`Prova armata per le ${fmtClock.format(at)}`);
   setTimeout(() => verifyTestFired(at), at - Date.now() + 15_000);
-  return `Prova armata: dovrebbe vibrare alle ${fmtClock.format(at)}. Puoi anche bloccare il telefono.`;
+  return `Prova armata per le ${fmtClock.format(at)}. Puoi chiudere Bluefy e allontanarti: vibra lo stesso.`;
 }
 
 // Quando una sveglia scatta, il firmware svuota lo slot: è la prova che l'ha eseguita.
 async function verifyTestFired(at) {
+  if (!strap.connected || busy) return; // app chiusa o occupata: lo verificherà «Rileggi» o il prossimo Arma
   const msg = $('testMsg');
+  busy = true;
   try {
-    if (!strap.connected || busy) return;
     const slot = await strap.readAlarm(TEST_SLOT);
     const fired = !slot || slot.epoch === 0;
     log(`Verifica prova: slot ${TEST_SLOT} ${fired ? 'svuotato → eseguita dal braccialetto' : `ancora armato (${slot.epoch})`}`);
@@ -280,25 +286,41 @@ async function verifyTestFired(at) {
     msg.textContent = fired
       ? `Il braccialetto ha eseguito la sveglia delle ${fmtClock.format(at)}. L'hai sentita vibrare?`
       : 'Il braccialetto risulta ancora armato: la prova non è partita. Copia il log da «Avanzate».';
-    if (fired) state.armed = state.armed.filter((a) => a.slot !== TEST_SLOT);
+    if (fired) {
+      state.armed = state.armed.filter((a) => !a.test);
+      // Restituisce lo slot preso in prestito alla settimana.
+      if (state.armedWeek !== null && !dirty()) {
+        await arm({ confirmBuzz: false });
+        msg.textContent += ' Settimana di nuovo completa.';
+      }
+    }
     save();
-    render();
   } catch (e) {
     log(`Verifica prova non riuscita: ${e.message}`);
+  } finally {
+    busy = false;
+    render();
   }
 }
 
 async function readBack() {
-  const records = await strap.readAllAlarms([...SCHEDULE_SLOTS, TEST_SLOT]);
+  const pendingTest = state.armed.find((a) => a.test);
+  const records = await strap.readAllAlarms(SCHEDULE_SLOTS);
   const now = Date.now() / 1000;
-  state.armed = records.filter((r) => r && r.epoch > now).map((r) => ({ slot: r.id, epoch: r.epoch }));
+  state.armed = records.filter((r) => r && r.epoch > now).map((r) => ({
+    slot: r.id, epoch: r.epoch, test: pendingTest?.slot === r.id && pendingTest.epoch === r.epoch,
+  }));
   for (const r of records) if (r) log(`  slot ${r.id}: ${r.epoch ? new Date(r.epoch * 1000).toLocaleString('it-IT') : 'vuoto'}`);
   save();
+  const stillThere = records.some((r) => r && r.id === pendingTest?.slot && r.epoch === pendingTest.epoch);
+  if (pendingTest && pendingTest.epoch < now && !stillThere) {
+    return `La prova delle ${fmtClock.format(new Date(pendingTest.epoch * 1000))} è stata eseguita dal braccialetto, anche ad app chiusa. Premi «Arma» per ricompletare la settimana.`;
+  }
   return `Sul braccialetto ci sono ${state.armed.length} sveglie future.`;
 }
 
 async function disarm() {
-  for (const slot of [...SCHEDULE_SLOTS, TEST_SLOT]) await strap.disableAlarm(slot);
+  for (const slot of SCHEDULE_SLOTS) await strap.disableAlarm(slot);
   await readBack();
   state.armedWeek = null;
   state.armedSkip = null;

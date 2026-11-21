@@ -7,9 +7,14 @@ const weekdays = ['', '07:00', '07:00', '07:00', '07:00', '07:00', ''];
 
 // Sabato 21/11/2026 alle 23:00 → lun–ven della settimana dopo
 let occ = nextOccurrences(weekdays, new Date(2026, 10, 21, 23, 0));
-assert.deepEqual(occ.map(dateKey), ['2026-11-23', '2026-11-24', '2026-11-25', '2026-11-26', '2026-11-27']);
+assert.deepEqual(occ.map(dateKey), ['2026-11-23', '2026-11-24', '2026-11-25', '2026-11-26', '2026-11-27', '2026-11-30']);
 assert.ok(occ.every((d) => d.getHours() === 7 && d.getMinutes() === 0));
-assert.equal(dateKey(rearmDeadline(occ)), '2026-11-26');
+
+// Armando sabato 6 sveglie lun–ven, la prima scoperta è martedì 1/12: si riarma entro lunedì sera
+let all = nextOccurrences(weekdays, new Date(2026, 10, 21, 23, 0), 7);
+assert.equal(dateKey(all[6]), '2026-12-01');
+assert.equal(dateKey(rearmDeadline(all[6])), '2026-11-30');
+assert.equal(rearmDeadline(all[6]).getHours(), 22);
 
 // Lunedì 06:59:30: troppo vicino, la sveglia di oggi viene saltata
 occ = nextOccurrences(weekdays, new Date(2026, 10, 23, 6, 59, 30));
@@ -31,6 +36,6 @@ assert.equal((occ[1] - occ[0]) / 3600e3, 23);
 
 // Settimana vuota
 assert.deepEqual(nextOccurrences(Array(7).fill(''), new Date()), []);
-assert.equal(rearmDeadline([]), null);
+assert.equal(rearmDeadline(undefined), null);
 
 console.log('ok — pianificazione corretta (anche con ora legale)');
