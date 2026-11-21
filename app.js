@@ -1,5 +1,5 @@
-import { Strap, describe } from './strap.js?v=8';
-import { nextOccurrences, rearmDeadline, dateKey, SCHEDULE_SLOTS, TEST_SLOT } from './schedule.js?v=8';
+import { Strap, describe } from './strap.js?v=9';
+import { nextOccurrences, rearmDeadline, dateKey, SCHEDULE_SLOTS, TEST_SLOT } from './schedule.js?v=9';
 
 const $ = (id) => document.getElementById(id);
 const DAYS = [[1, 'Lunedì'], [2, 'Martedì'], [3, 'Mercoledì'], [4, 'Giovedì'], [5, 'Venerdì'], [6, 'Sabato'], [0, 'Domenica']];
@@ -372,8 +372,26 @@ if (!navigator.bluetooth) {
   $('noBluetooth').hidden = false;
   $('pageUrl').textContent = location.href;
 }
+// Bluefy tiene in cache anche la pagina: se sul server c'è una versione più nuova, ricarica.
+const APP_VERSION = 9;
+async function checkForUpdate() {
+  try {
+    const res = await fetch(`version.json?t=${Date.now()}`, { cache: 'no-store' });
+    const { v } = await res.json();
+    const url = new URL(location.href);
+    // Una sola ricarica per versione: se il server serve ancora la pagina vecchia, niente giri infiniti.
+    if (v > APP_VERSION && !busy && url.searchParams.get('v') !== String(v)) {
+      log(`Nuova versione ${v} disponibile, ricarico…`);
+      url.searchParams.set('v', v);
+      location.replace(url);
+    }
+  } catch {}
+}
+checkForUpdate();
+document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && checkForUpdate());
+
 renderWeek();
 changed();
 setInterval(render, 60_000);
 document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && render());
-log(`Pronta (versione 8). Bluetooth web ${navigator.bluetooth ? 'disponibile' : 'NON disponibile'}.`);
+log(`Pronta (versione 9). Bluetooth web ${navigator.bluetooth ? 'disponibile' : 'NON disponibile'}.`);
