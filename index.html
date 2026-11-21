@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d0f12">
+<title>Sveglia Whoop</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⏰</text></svg>">
+<style>
+  :root {
+    --bg: #f4f5f7; --surface: #ffffff; --surface-2: #eceef2; --text: #14171c; --muted: #636b78;
+    --line: #dde1e7; --accent: #1f6feb; --accent-ink: #ffffff; --ok: #1a7f45; --warn: #a35a00; --err: #c62828;
+    --radius: 16px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d0f12; --surface: #171a1f; --surface-2: #20242b; --text: #eef1f5; --muted: #949cab;
+      --line: #2a2f38; --accent: #4c8dff; --accent-ink: #0d0f12; --ok: #4cc27f; --warn: #f0a838; --err: #ff6b6b;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d0f12; --surface: #171a1f; --surface-2: #20242b; --text: #eef1f5; --muted: #949cab;
+    --line: #2a2f38; --accent: #4c8dff; --accent-ink: #0d0f12; --ok: #4cc27f; --warn: #f0a838; --err: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    padding: max(16px, env(safe-area-inset-top)) 16px max(32px, env(safe-area-inset-bottom));
+  }
+  main { max-width: 520px; margin: 0 auto; display: grid; gap: 16px; }
+  h1 { font-size: 15px; font-weight: 600; color: var(--muted); margin: 4px 0 0; letter-spacing: .02em; }
+  h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+
+  .hero { text-align: center; padding: 22px 16px; }
+  .hero .label { color: var(--muted); font-size: 14px; }
+  .hero .time { font-size: 64px; font-weight: 700; letter-spacing: -.03em; line-height: 1.05; font-variant-numeric: tabular-nums; margin: 4px 0; }
+  .hero .day { font-size: 17px; font-weight: 500; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; padding: 5px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; background: var(--surface-2); }
+  .pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .pill.ok { color: var(--ok); } .pill.warn { color: var(--warn); } .pill.err { color: var(--err); } .pill.idle { color: var(--muted); }
+
+  .week { display: grid; gap: 2px; }
+  .day-row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 12px; min-height: 48px; border-bottom: 1px solid var(--line); }
+  .day-row:last-child { border-bottom: 0; }
+  .day-row .name { font-weight: 500; }
+  .day-row.off .name { color: var(--muted); }
+  input[type="time"] {
+    font: inherit; font-size: 18px; font-variant-numeric: tabular-nums; color: var(--text); background: var(--surface-2);
+    border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; min-width: 104px;
+  }
+  .day-row.off input[type="time"] { opacity: .35; }
+  .switch { position: relative; width: 51px; height: 31px; flex: none; }
+  .switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+  .switch span { position: absolute; inset: 0; border-radius: 999px; background: var(--line); transition: background .2s; pointer-events: none; }
+  .switch span::after { content: ""; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: transform .2s; }
+  .switch input:checked + span { background: var(--ok); }
+  .switch input:checked + span::after { transform: translateX(20px); }
+  .switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .row-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  button {
+    font: inherit; font-weight: 600; border: 0; border-radius: 12px; padding: 12px 16px; cursor: pointer;
+    background: var(--surface-2); color: var(--text); min-height: 44px;
+  }
+  button:disabled { opacity: .5; cursor: default; }
+  button.primary { background: var(--accent); color: var(--accent-ink); width: 100%; font-size: 17px; padding: 16px; }
+  button.small { font-size: 14px; padding: 8px 12px; min-height: 36px; }
+  button.danger { color: var(--err); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .armed { list-style: none; margin: 0; padding: 0; }
+  .armed li { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .armed li:last-child { border-bottom: 0; }
+  .armed .when { font-weight: 500; }
+  .armed .when b { font-variant-numeric: tabular-nums; }
+  .armed .meta { font-size: 13px; color: var(--muted); }
+  .armed .skipped .when { text-decoration: line-through; color: var(--muted); }
+  .empty { color: var(--muted); font-size: 14px; margin: 0; }
+  .note { font-size: 14px; color: var(--muted); margin: 10px 0 0; }
+  .note strong { color: var(--text); }
+  .msg { font-size: 14px; margin: 10px 0 0; }
+  .msg:empty { display: none; }
+  .msg.err { color: var(--err); } .msg.ok { color: var(--ok); }
+
+  details summary { cursor: pointer; font-weight: 600; list-style: none; display: flex; justify-content: space-between; align-items: center; }
+  details summary::-webkit-details-marker { display: none; }
+  details summary::after { content: "›"; font-size: 22px; color: var(--muted); transition: transform .2s; }
+  details[open] summary::after { transform: rotate(90deg); }
+  pre { font: 12px/1.5 ui-monospace, Menlo, monospace; background: var(--surface-2); border-radius: 10px; padding: 10px; max-height: 260px; overflow: auto; white-space: pre-wrap; word-break: break-all; margin: 12px 0 0; }
+  ol { padding-left: 20px; margin: 8px 0 0; } ol li { margin: 4px 0; }
+  .unsupported { border-color: var(--warn); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Sveglia Whoop · senza abbonamento</h1>
+
+  <section class="card unsupported" id="noBluetooth" hidden>
+    <h2>Apri in Bluefy</h2>
+    <p style="margin:0">Safari non può parlare con il braccialetto. Installa <strong>Bluefy – Web BLE Browser</strong> (gratis, App Store) e apri lì questo indirizzo:</p>
+    <pre id="pageUrl"></pre>
+    <button class="small" id="copyUrl" style="margin-top:10px">Copia indirizzo</button>
+  </section>
+
+  <section class="card hero" aria-live="polite">
+    <div class="label" id="heroLabel">Prossima sveglia</div>
+    <div class="time" id="heroTime">--:--</div>
+    <div class="day" id="heroDay">Nessuna sveglia armata</div>
+    <div class="pill idle" id="statusPill">Non ancora armata</div>
+  </section>
+
+  <section class="card">
+    <h2>Settimana</h2>
+    <div class="week" id="week"></div>
+    <div class="row-actions">
+      <button class="small" id="copyWeekdays">Lun–Ven come lunedì</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <button class="primary" id="arm">Arma sul braccialetto</button>
+    <p class="msg" id="armMsg"></p>
+    <p class="note">Il braccialetto conserva fino a <strong>5 sveglie</strong> e vibra da solo, anche col telefono spento o lontano. Le sveglie ripetute non esistono nel firmware, quindi l'app arma le prossime 5 e tu la riapri ogni tanto: ti dice lei entro quando.</p>
+  </section>
+
+  <section class="card">
+    <h2>Sul braccialetto</h2>
+    <ul class="armed" id="armed"></ul>
+    <p class="empty" id="armedEmpty">Niente di armato. Imposta la settimana e premi «Arma».</p>
+  </section>
+
+  <section class="card">
+    <h2>Prova</h2>
+    <div class="row-actions" style="margin-top:0">
+      <button id="buzz">Vibra ora</button>
+      <button id="testAlarm">Sveglia di prova tra 1 minuto</button>
+    </div>
+    <p class="msg" id="testMsg"></p>
+  </section>
+
+  <section class="card">
+    <details>
+      <summary>Come funziona</summary>
+      <ol>
+        <li>Indossa il Whoop, con il Bluetooth dell'iPhone acceso.</li>
+        <li>Imposta gli orari e premi <strong>Arma</strong>. Al primo uso scegli il tuo Whoop nell'elenco. Se iOS chiede di abbinarlo, accetta.</li>
+        <li>L'app rimette a posto l'orologio del braccialetto, scrive le sveglie e le rilegge una per una per controllarle.</li>
+        <li>Al mattino vibra per circa 30 secondi. Per fermarlo, tocca due volte il braccialetto.</li>
+        <li>Riapri l'app entro la data che vedi in alto, oppure quando cambi orario.</li>
+      </ol>
+      <p class="note">Le sveglie restano nel braccialetto anche se chiudi l'app. Se lo spegni del tutto o si scarica, riarmale.</p>
+    </details>
+  </section>
+
+  <section class="card">
+    <details id="advanced">
+      <summary>Avanzate e diagnostica</summary>
+      <div class="row-actions">
+        <button class="small" id="readBack">Rileggi dal braccialetto</button>
+        <button class="small danger" id="disarm">Disarma tutto</button>
+        <button class="small" id="copyLog">Copia log</button>
+      </div>
+      <pre id="log"></pre>
+    </details>
+  </section>
+</main>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
