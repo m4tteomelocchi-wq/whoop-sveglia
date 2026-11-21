@@ -1,5 +1,5 @@
-import { Strap, describe } from './strap.js?v=11';
-import { nextOccurrences, rearmDeadline, dateKey, SCHEDULE_SLOTS, TEST_SLOT } from './schedule.js?v=11';
+import { Strap, describe } from './strap.js?v=12';
+import { nextOccurrences, rearmDeadline, dateKey, SCHEDULE_SLOTS, TEST_SLOT } from './schedule.js?v=12';
 
 const $ = (id) => document.getElementById(id);
 const DAYS = [[1, 'Lunedì'], [2, 'Martedì'], [3, 'Mercoledì'], [4, 'Giovedì'], [5, 'Venerdì'], [6, 'Sabato'], [0, 'Domenica']];
@@ -52,7 +52,9 @@ function log(line) {
 
 const strap = new Strap(log);
 let clockSynced = false;
-strap.onDisconnect = () => { clockSynced = false; };
+let connectedAt = null;
+let connecting = false;
+strap.onDisconnect = () => { clockSynced = false; connectedAt = null; $('connMsg').textContent = ''; render(); };
 
 // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -102,8 +104,41 @@ function renderStrapInfo() {
     : `Whoop: batteria ${Math.round(s.battery)}% · orologio allineato · ${when}`;
 }
 
-function renderStatus() {
+const fmtDuration = (ms) => {
+  const min = Math.floor(ms / 60_000);
+  if (min < 1) return 'meno di un minuto';
+  if (min < 60) return `${min} min`;
+  return `${Math.floor(min / 60)} h ${min % 60} min`;
+};
+
+// Fino a quando le sveglie funzionano anche senza collegamento (calcolata da renderStatus).
+let coverageUntil = null;
+
+function renderConnection() {
+  const card = $('conn');
+  const on = strap.connected && connectedAt;
+  card.className = `card conn ${on ? 'on' : connecting ? 'busy' : 'off'}`;
+  const until = coverageUntil
+    ? `Le sveglie suonano anche senza collegamento fino a <strong>${fmtDay.format(coverageUntil)}</strong>.`
+    : 'Nessuna sveglia armata: collegalo e premi Arma.';
+  if (on) {
+    $('connTitle').textContent = `Collegato a ${strap.device.name || 'WHOOP'}`;
+    $('connSub').innerHTML = `Da ${fmtDuration(Date.now() - connectedAt)} · resta collegato finché Bluefy è aperto e il telefono è vicino.<br>${until}`;
+    $('connect').textContent = 'Scollega';
+    $('connect').classList.remove('primary');
+  } else if (connecting) {
+    $('connTitle').textContent = 'Collegamento in corso…';
+    $('connSub').textContent = 'Se compare l\'elenco, scegli il tuo Whoop.';
+  } else {
+    $('connTitle').textContent = 'Whoop non collegato';
+    $('connSub').innerHTML = until;
+    $('connect').textContent = 'Collega il Whoop';
+    $('connect').classList.add('primary');
+  }
   renderStrapInfo();
+}
+
+function renderStatus() {
   const up = upcomingArmed();
   const pill = $('statusPill');
   const next = up[0] && new Date(up[0].epoch * 1000);
@@ -124,6 +159,7 @@ function renderStatus() {
   const firstUnarmed = nextOccurrences(weekSpec(), new Date(), SCHEDULE_SLOTS.length + 1, skipSet())
     .find((d) => !armedEpochs.has(Math.floor(d / 1000)));
   const deadline = rearmDeadline(firstUnarmed);
+  coverageUntil = armedEpochs.size ? new Date(Math.max(...armedEpochs) * 1000) : null;
 
   if (!state.armed.length && state.armedWeek === null) {
     setPill('idle', 'Non ancora armata');
@@ -204,6 +240,7 @@ function renderPendingTest() {
 function render() {
   renderPendingTest();
   renderStatus();
+  renderConnection();
   renderArmed();
 }
 
@@ -218,7 +255,7 @@ function changed() {
 // ── Azioni ──────────────────────────────────────────────────────────────────
 
 let busy = false;
-const actionButtons = ['arm', 'buzz', 'testAlarm', 'readBack', 'disarm', 'verifyTest'].map($);
+const actionButtons = ['connect', 'arm', 'buzz', 'testAlarm', 'readBack', 'disarm', 'verifyTest'].map($);
 
 let lastAction = null;
 let currentMsg = null;
@@ -269,7 +306,14 @@ async function ensureConnected() {
   if (!strap.connected) {
     const msg = currentMsg;
     if (msg) msg.textContent = 'Cerco il Whoop…';
-    await strap.connect();
+    connecting = true;
+    render();
+    try {
+      await strap.connect();
+    } finally {
+      connecting = false;
+    }
+    connectedAt = Date.now();
     if (msg) msg.textContent = 'Collegato, un attimo…';
   }
   if (!clockSynced) {
@@ -369,6 +413,20 @@ async function disarm() {
 
 // ── Avvio ───────────────────────────────────────────────────────────────────
 
+$('connect').addEventListener('click', () => {
+  if (strap.connected) {
+    strap.disconnect();
+    strap.command = null;
+    connectedAt = null;
+    clockSynced = false;
+    $('connMsg').textContent = '';
+    render();
+    return;
+  }
+  run($('connMsg'), 'Cerco il Whoop…', async () => {
+    return '';
+  });
+});
 $('arm').addEventListener('click', () => run($('armMsg'), 'Connessione al braccialetto…', arm));
 $('buzz').addEventListener('click', () => run($('testMsg'), 'Connessione…', async () => { await strap.buzz(); return 'Ha vibrato?'; }));
 $('testAlarm').addEventListener('click', () => run($('testMsg'), 'Connessione…', testAlarm));
@@ -399,7 +457,7 @@ if (!navigator.bluetooth) {
   $('pageUrl').textContent = location.href;
 }
 // Bluefy tiene in cache anche la pagina: se sul server c'è una versione più nuova, ricarica.
-const APP_VERSION = 11;
+const APP_VERSION = 12;
 async function checkForUpdate() {
   try {
     const res = await fetch(`version.json?t=${Date.now()}`, { cache: 'no-store' });
@@ -418,6 +476,6 @@ document.addEventListener('visibilitychange', () => document.visibilityState ===
 
 renderWeek();
 changed();
-setInterval(render, 60_000);
+setInterval(render, 30_000);
 document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && render());
-log(`Pronta (versione 11). Bluetooth web ${navigator.bluetooth ? 'disponibile' : 'NON disponibile'}.`);
+log(`Pronta (versione 12). Bluetooth web ${navigator.bluetooth ? 'disponibile' : 'NON disponibile'}.`);

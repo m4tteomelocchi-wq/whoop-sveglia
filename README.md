@@ -28,7 +28,7 @@ direttamente nel firmware, che poi vibra da solo anche col telefono spento.
 ```sh
 bun test/whoop5.test.mjs        # frame identici ai golden di NOOP
 bun test/schedule.test.mjs      # pianificazione, salti, ora legale
-bun test/strap.sim.test.mjs     # client contro un braccialetto simulato
+bun test/strap.sim.test.mjs     # client contro il braccialetto simulato (test/sim-strap.mjs)
 ```
 
 ## Crediti
