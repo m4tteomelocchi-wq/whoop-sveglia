@@ -21,12 +21,14 @@ direttamente nel firmware, che poi vibra da solo anche col telefono spento.
 | `whoop5.js` | framing, CRC e corpi dei comandi |
 | `strap.js` | connessione Web Bluetooth e richiesta/risposta |
 | `schedule.js` | calcolo delle prossime occorrenze (ora legale inclusa) |
+| `reminder.js`, `reminders/` | promemoria nel Calendario per riarmare (rigenera con `bun tools/gen-reminders.mjs`) |
 | `app.js`, `index.html` | interfaccia |
 
 ## Test
 
 ```sh
 bun test/whoop5.test.mjs        # frame identici ai golden di NOOP
+bun test/reminder.test.mjs      # cadenza del promemoria e file .ics
 bun test/schedule.test.mjs      # pianificazione, salti, ora legale
 bun test/strap.sim.test.mjs     # client contro il braccialetto simulato (test/sim-strap.mjs)
 ```

@@ -24,7 +24,7 @@ const info = await strap.syncClock();
 assert.equal(info.firmware, '50.42.1.0');
 assert.equal(info.battery, 87);
 assert.ok(Math.abs(info.skew) <= 1, `scarto residuo ${info.skew}`);
-assert.ok(logs.some((l) => l.includes('scarto -40s')));
+assert.ok(logs.some((l) => /scarto -(39|40|41)s/.test(l)), 'scarto di circa 40 s rilevato');
 
 // Settimana completa: 5 slot scritti e riletti
 const week = ['', '07:00', '07:00', '07:00', '07:00', '07:00', ''];

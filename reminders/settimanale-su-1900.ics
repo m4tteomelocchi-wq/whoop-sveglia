@@ -1,0 +1,20 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Sveglia Whoop//IT
+CALSCALE:GREGORIAN
+BEGIN:VEVENT
+UID:settimanale-su-1900@m4tteomelocchi-wq.github.io
+DTSTAMP:20261121T000000Z
+DTSTART:20261122T190000
+DTEND:20261122T191500
+RRULE:FREQ=WEEKLY;BYDAY=SU
+SUMMARY:Riarma la sveglia Whoop
+DESCRIPTION:Apri Bluefy e premi Arma: https://m4tteomelocchi-wq.github.io/whoop-sveglia/
+URL:https://m4tteomelocchi-wq.github.io/whoop-sveglia/
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Riarma la sveglia Whoop
+TRIGGER:PT0M
+END:VALARM
+END:VEVENT
+END:VCALENDAR

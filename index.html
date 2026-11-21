@@ -91,6 +91,13 @@
   .conn.on .conn-title { color: var(--ok); }
   .conn-sub { font-size: 14px; color: var(--muted); margin-top: 2px; }
   .conn-sub strong { color: var(--text); }
+  .rem-row { display: grid; grid-template-columns: 1fr auto; align-items: center; min-height: 48px; border-bottom: 1px solid var(--line); }
+  .rem-row label { font-weight: 500; }
+  select {
+    font: inherit; font-size: 17px; color: var(--text); background: var(--surface-2);
+    border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; min-width: 140px;
+  }
+  .note.warn { color: var(--warn); font-weight: 600; }
   .strap-info { margin-top: 10px; font-size: 13px; color: var(--muted); }
   .strap-info.low { color: var(--warn); font-weight: 600; }
   .empty { color: var(--muted); font-size: 14px; margin: 0; }
@@ -174,6 +181,26 @@
     <p class="note">Il braccialetto conserva fino a <strong>6 sveglie</strong> e le fa suonare da solo, con il suo orologio interno: il telefono può essere spento, lontano, con l'app chiusa. Le sveglie ripetute non esistono nel firmware, quindi l'app arma le prossime 6 e ti dice entro quando riaprirla.</p>
   </section>
 
+  <section class="card" id="reminderCard">
+    <h2>Promemoria per riarmare</h2>
+    <div class="rem-row" id="remDayRow">
+      <label for="remDay">Giorno</label>
+      <select id="remDay"></select>
+    </div>
+    <div class="rem-row">
+      <label for="remTime">Ora</label>
+      <select id="remTime"></select>
+    </div>
+    <p class="note" id="remPlan"></p>
+    <button class="primary" id="addReminder" style="margin-top:12px">Aggiungi al Calendario</button>
+    <p class="msg" id="remMsg" aria-live="polite"></p>
+    <div id="remFallback" hidden>
+      <p class="note">Bluefy non ha aperto Safari. Copia questo link, incollalo in <strong>Safari</strong> e tocca «Aggiungi tutto»:</p>
+      <pre id="remLink"></pre>
+      <button class="small" id="copyRemLink" style="margin-top:8px">Copia link</button>
+    </div>
+  </section>
+
   <section class="card">
     <h2>Sul braccialetto</h2>
     <ul class="armed" id="armed"></ul>
@@ -212,7 +239,7 @@
         <button class="small danger" id="disarm">Disarma tutto</button>
         <button class="small" id="copyLog">Copia log</button>
       </div>
-      <p class="note">Versione 12</p>
+      <p class="note">Versione 13</p>
       <p class="note" id="reconnectInfo">Riconnessione senza elenco: non ancora provata.</p>
       <p class="msg" id="advMsg" aria-live="polite"></p>
       <pre id="log"></pre>
@@ -220,6 +247,6 @@
   </section>
 </main>
 
-<script type="module" src="app.js?v=12"></script>
+<script type="module" src="app.js?v=13"></script>
 </body>
 </html>

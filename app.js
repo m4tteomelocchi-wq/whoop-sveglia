@@ -1,5 +1,6 @@
-import { Strap, describe } from './strap.js?v=12';
-import { nextOccurrences, rearmDeadline, dateKey, SCHEDULE_SLOTS, TEST_SLOT } from './schedule.js?v=12';
+import { Strap, describe } from './strap.js?v=13';
+import { nextOccurrences, rearmDeadline, dateKey, SCHEDULE_SLOTS, TEST_SLOT } from './schedule.js?v=13';
+import { reminderPlan, suggestWeekday, reminderFileName, REMINDER_TIMES } from './reminder.js?v=13';
 
 const $ = (id) => document.getElementById(id);
 const DAYS = [[1, 'Lunedì'], [2, 'Martedì'], [3, 'Mercoledì'], [4, 'Giovedì'], [5, 'Venerdì'], [6, 'Sabato'], [0, 'Domenica']];
@@ -19,6 +20,7 @@ const defaults = () => ({
   armedWeek: null,
   armedSkip: null,
   strap: null,    // { battery, firmware, skew, at } dall'ultima connessione
+  reminder: null, // { weekday, time, added } — added = file aggiunto al Calendario
 });
 
 function load() {
@@ -138,6 +140,70 @@ function renderConnection() {
   renderStrapInfo();
 }
 
+const WEEKDAY_NAMES = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato'];
+
+function reminderChoice() {
+  if (!state.reminder) state.reminder = { weekday: suggestWeekday(weekSpec(), '21:00'), time: '21:00', added: null };
+  return state.reminder;
+}
+
+function renderReminder() {
+  const r = reminderChoice();
+  const plan = reminderPlan(weekSpec(), r.weekday, r.time);
+  $('remDay').value = String(r.weekday);
+  $('remTime').value = r.time;
+  $('remDayRow').hidden = plan.everyDays === 6;
+  const note = $('remPlan');
+  note.className = 'note';
+  if (!plan.ok && !plan.everyDays) {
+    note.textContent = plan.reason;
+  } else if (!plan.ok) {
+    note.className = 'note warn';
+    note.textContent = `${plan.reason} Scegli un altro giorno.`;
+  } else if (plan.everyDays === 6) {
+    note.textContent = `Hai la sveglia tutti i giorni: 6 sveglie non coprono una settimana, quindi il promemoria arriva ogni 6 giorni alle ${r.time}.`;
+  } else {
+    note.textContent = `Ogni ${WEEKDAY_NAMES[r.weekday]} alle ${r.time}. Riarmando quel giorno, le sveglie coprono tutta la settimana dopo.`;
+  }
+  const file = plan.ok ? reminderFileName({ everyDays: plan.everyDays, weekday: r.weekday }, r.time) : null;
+  if (r.added && file && r.added !== file) {
+    note.className = 'note warn';
+    note.textContent += ' Il promemoria nel Calendario è per un orario diverso: aggiungi questo e cancella il vecchio.';
+  }
+  $('addReminder').disabled = !plan.ok;
+  $('addReminder').textContent = r.added === file ? 'Già nel Calendario ✓ (aggiungi di nuovo)' : 'Aggiungi al Calendario';
+}
+
+function addReminder() {
+  const r = reminderChoice();
+  const plan = reminderPlan(weekSpec(), r.weekday, r.time);
+  if (!plan.ok) return;
+  const name = reminderFileName({ everyDays: plan.everyDays, weekday: r.weekday }, r.time);
+  const url = new URL(`reminders/${name}`, location.origin + location.pathname).href;
+  $('remLink').textContent = url;
+  r.added = name;
+  save();
+  if (!navigator.bluetooth) {
+    // Già in Safari (o in un browser normale): il file si apre direttamente.
+    location.href = url;
+    return;
+  }
+  // In Bluefy il Calendario non si apre: si passa il file a Safari.
+  $('remMsg').className = 'msg';
+  $('remMsg').textContent = 'Apro Safari…';
+  location.href = url.replace(/^https:/, 'x-safari-https:');
+  setTimeout(() => {
+    if (document.visibilityState === 'visible') {
+      $('remMsg').textContent = '';
+      $('remFallback').hidden = false;
+    } else {
+      $('remMsg').className = 'msg ok';
+      $('remMsg').textContent = 'In Safari tocca «Aggiungi tutto». Poi torna qui.';
+    }
+    renderReminder();
+  }, 1500);
+}
+
 function renderStatus() {
   const up = upcomingArmed();
   const pill = $('statusPill');
@@ -238,6 +304,7 @@ function renderPendingTest() {
 }
 
 function render() {
+  renderReminder();
   renderPendingTest();
   renderStatus();
   renderConnection();
@@ -427,6 +494,15 @@ $('connect').addEventListener('click', () => {
     return '';
   });
 });
+for (const [i, name] of WEEKDAY_NAMES.entries()) $('remDay').add(new Option(name.charAt(0).toUpperCase() + name.slice(1), String(i)));
+for (const t of REMINDER_TIMES) $('remTime').add(new Option(t, t));
+$('remDay').addEventListener('change', () => { reminderChoice().weekday = Number($('remDay').value); save(); renderReminder(); });
+$('remTime').addEventListener('change', () => { reminderChoice().time = $('remTime').value; save(); renderReminder(); });
+$('addReminder').addEventListener('click', addReminder);
+$('copyRemLink').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText($('remLink').textContent); $('copyRemLink').textContent = 'Copiato ✓'; }
+  catch { $('copyRemLink').textContent = 'Selezionalo a mano'; }
+});
 $('arm').addEventListener('click', () => run($('armMsg'), 'Connessione al braccialetto…', arm));
 $('buzz').addEventListener('click', () => run($('testMsg'), 'Connessione…', async () => { await strap.buzz(); return 'Ha vibrato?'; }));
 $('testAlarm').addEventListener('click', () => run($('testMsg'), 'Connessione…', testAlarm));
@@ -457,7 +533,7 @@ if (!navigator.bluetooth) {
   $('pageUrl').textContent = location.href;
 }
 // Bluefy tiene in cache anche la pagina: se sul server c'è una versione più nuova, ricarica.
-const APP_VERSION = 12;
+const APP_VERSION = 13;
 async function checkForUpdate() {
   try {
     const res = await fetch(`version.json?t=${Date.now()}`, { cache: 'no-store' });
@@ -478,4 +554,4 @@ renderWeek();
 changed();
 setInterval(render, 30_000);
 document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && render());
-log(`Pronta (versione 12). Bluetooth web ${navigator.bluetooth ? 'disponibile' : 'NON disponibile'}.`);
+log(`Pronta (versione 13). Bluetooth web ${navigator.bluetooth ? 'disponibile' : 'NON disponibile'}.`);
