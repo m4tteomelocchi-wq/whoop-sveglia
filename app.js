@@ -185,21 +185,29 @@ function changed() {
 let busy = false;
 const actionButtons = ['arm', 'buzz', 'testAlarm', 'readBack', 'disarm'].map($);
 
+let lastAction = null;
+
 async function run(msgEl, label, fn) {
   if (busy) return;
+  lastAction = () => run(msgEl, label, fn);
   busy = true;
   actionButtons.forEach((b) => (b.disabled = true));
   msgEl.className = 'msg';
   msgEl.textContent = label;
   try {
     await ensureConnected();
+    $('notFound').hidden = true;
     const text = await fn();
     msgEl.className = 'msg ok';
     msgEl.textContent = text;
   } catch (e) {
-    log(`ERRORE: ${e.message}`);
+    log(`ERRORE: ${e.name}: ${e.message}`);
     msgEl.className = 'msg err';
     msgEl.textContent = humanError(e);
+    if (e.name === 'NotFoundError' || /non è un WHOOP/.test(e.message)) {
+      $('notFound').hidden = false;
+      $('notFound').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   } finally {
     busy = false;
     actionButtons.forEach((b) => (b.disabled = false));
@@ -208,7 +216,8 @@ async function run(msgEl, label, fn) {
 }
 
 function humanError(e) {
-  if (e.name === 'NotFoundError') return 'Nessun braccialetto selezionato.';
+  if (e.name === 'NotFoundError') return 'Braccialetto non trovato: segui i passi in alto.';
+  if (/non è un WHOOP/.test(e.message)) return 'Hai scelto un dispositivo che non è il Whoop: segui i passi in alto.';
   if (e.name === 'NetworkError') return 'Connessione persa. Avvicina il telefono al braccialetto e riprova.';
   if (/Bluefy/.test(e.message)) return e.message;
   if (/nessuna risposta/.test(e.message)) return 'Il braccialetto non risponde. Se usi l\'app Whoop, chiudila del tutto e riprova.';
@@ -319,6 +328,7 @@ $('copyLog').addEventListener('click', async () => {
   catch { $('copyLog').textContent = 'Selezionalo a mano'; }
   setTimeout(() => ($('copyLog').textContent = 'Copia log'), 2000);
 });
+$('retry').addEventListener('click', () => lastAction?.());
 $('copyUrl').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(location.href); $('copyUrl').textContent = 'Copiato ✓'; } catch {}
 });

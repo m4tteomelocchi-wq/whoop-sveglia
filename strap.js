@@ -27,9 +27,10 @@ export class Strap {
       throw new Error('Questo browser non supporta il Bluetooth. Su iPhone apri la pagina in Bluefy.');
     }
     if (!this.device) {
+      // Anche per nome: alcuni firmware mettono l'UUID del servizio solo nella scan response.
       this.device = await navigator.bluetooth.requestDevice({
-        filters: [{ services: [W.SERVICE] }],
-        optionalServices: ['battery_service'],
+        filters: [{ services: [W.SERVICE] }, { namePrefix: 'WHOOP' }, { namePrefix: 'Whoop' }],
+        optionalServices: [W.SERVICE, 'battery_service'],
       });
       this.device.addEventListener('gattserverdisconnected', () => {
         this.command = null;
@@ -39,7 +40,14 @@ export class Strap {
     }
     this.log(`Connessione a ${this.device.name || 'WHOOP'}…`);
     const gatt = await this.device.gatt.connect();
-    const service = await gatt.getPrimaryService(W.SERVICE);
+    let service;
+    try {
+      service = await gatt.getPrimaryService(W.SERVICE);
+    } catch {
+      this.device.gatt.disconnect();
+      this.device = null;
+      throw new Error('Questo dispositivo non è un WHOOP 5.0 / MG');
+    }
     this.command = await service.getCharacteristic(W.COMMAND_CHAR);
 
     let subscribed = 0;
